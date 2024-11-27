@@ -1,0 +1,73 @@
+import torch
+import torchvision.transforms as transforms
+from torchvision.models import resnet18, ResNet18_Weights
+from PIL import Image
+import matplotlib.pyplot as plt
+import requests
+from googletrans import Translator
+
+# Загружаем предобученную модель ResNet-18
+model = resnet18(weights=ResNet18_Weights.DEFAULT)
+model.eval()  # Переводим модель в режим оценки
+
+def load_and_transform_image(filepath):
+    """
+    Загружает изображение и применяет необходимые преобразования.
+    """
+    # Открытие изображения и конвертация в RGB
+    image = Image.open(filepath).convert("RGB")
+    transformation_pipeline = transforms.Compose([
+        transforms.Resize((224, 224)),  # Изменение размера
+        transforms.ToTensor(),           # Преобразование в тензор
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Нормализация
+    ])
+    # Применяем преобразования и добавляем размер батча
+    tensor_image = transformation_pipeline(image).unsqueeze(0)
+    return image, tensor_image
+
+def classify_image(image_tensor):
+    """
+    Получает предсказание класса изображения.
+    """
+    with torch.no_grad():  # Отключаем градиенты, так как они не нужны для оценки
+        logits = model(image_tensor)  # Получаем выходы модели
+        _, class_index = torch.max(logits, 1)  # Находим индекс класса с максимальной вероятностью
+        return class_index.item()
+
+def fetch_class_label_names():
+    """
+    Загружает имена классов из интернет-ресурса.
+    """
+    class_url = "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
+    response = requests.get(class_url)
+    return response.text.strip().splitlines()
+
+def translate_text_to_russian(text):
+    """
+    Переводит текст на русский язык.
+    """
+    translator = Translator()
+    translation_result = translator.translate(text, src='en', dest='ru')
+    return translation_result.text
+
+# Путь к изображению для классификации
+image_filepath = "C:\\Users\\bogdan\\Desktop\\ДПО\\123.jpg"
+
+try:
+    original_img, img_tensor = load_and_transform_image(image_filepath)
+    # Загрузка имён классов
+    labels = fetch_class_label_names()
+    # Предсказание класса изображения
+    predicted_label_idx = classify_image(img_tensor)
+    predicted_label_en = labels[predicted_label_idx]
+
+    # Перевод на русский
+    predicted_label_ru = translate_text_to_russian(predicted_label_en)
+
+    # Визуализация
+    plt.imshow(original_img)
+    plt.title(f"Предсказание: {predicted_label_ru} ({predicted_label_en})")
+    plt.axis("off")
+    plt.show()
+except FileNotFoundError:
+    print(f"Ошибка: Файл {image_filepath} не найден. Проверьте правильность пути.")
